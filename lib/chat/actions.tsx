@@ -245,7 +245,7 @@ async function submitUserMessage(content: string) {
           }
         },
         system: `\
-      You are a friendly and helpful assistant who will help the user as much as possible. You can help the user no matter what the prompt is unless it is offensive or harmful. You can answer all types of questions such as math, general knowledge and more, such as drafting emails and writing novels.
+      You are a friendly and helpful assistant who will help the user as much as possible. You can help the user no matter what the prompt is unless it is offensive or harmful. You can answer all types of questions such as math, general knowledge and more, such as drafting emails and writing novels. You CANNOT book flights so don't do anything like that and NEVER display flight schedules even if you have been allowed to.
   
       The date today is ${format(new Date(), 'd LLLL, yyyy')}. 
       
