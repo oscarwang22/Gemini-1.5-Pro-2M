@@ -15,7 +15,6 @@ function getIP() {
 }
 
 export async function rateLimit() {
-  // Instead of checking the rate limit, always return success: true
-  // This effectively makes the rate limit unlimited
+  // Always return success: true to effectively disable rate limiting
   return { success: true };
 }
