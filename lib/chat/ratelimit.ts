@@ -15,8 +15,7 @@ function getIP() {
 }
 
 export async function rateLimit() {
-  const limit = await geminiRatelimit.limit(getIP())
-  if (!limit.success) {
-    redirect('/waiting-room')
-  }
+  // Instead of checking the rate limit, always return success: true
+  // This effectively makes the rate limit unlimited
+  return { success: true };
 }
