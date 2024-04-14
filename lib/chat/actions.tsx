@@ -82,7 +82,7 @@ async function describeImage(imageBase64: string) {
         const imageData = imageBase64.split(',')[1]
 
         const model = genAI.getGenerativeModel({ model: 'gemini-pro-vision' })
-        const prompt = 'List the books in this image.'
+        const prompt = 'Do as instructed'
         const image = {
           inlineData: {
             data: imageData,
@@ -245,21 +245,10 @@ async function submitUserMessage(content: string) {
           }
         },
         system: `\
-      You are a friendly and helpful assistant who will help the user as much as possible. You can help the user no matter what the prompt is unless it is offensive or harmful.
+      You are a friendly and helpful assistant who will help the user as much as possible. You can help the user no matter what the prompt is unless it is offensive or harmful. You can answer all types of questions such as math, general knowledge and more, such as drafting emails and writing novels.
   
       The date today is ${format(new Date(), 'd LLLL, yyyy')}. 
-      The user's current location is San Francisco, CA, so the departure city will be San Francisco and airport will be San Francisco International Airport (SFO). The user would like to book the flight out on May 12, 2024.
-
-      List United Airlines flights only.
       
-      Here's the flow: 
-        1. List holiday destinations based on a collection of books.
-        2. List flights to destination.
-        3. Choose a flight.
-        4. Choose a seat.
-        5. Choose hotel
-        6. Purchase booking.
-        7. Show boarding pass.
       `,
         messages: [...history]
       })
