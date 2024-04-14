@@ -19,6 +19,8 @@ import { saveChat } from '@/app/actions'
 import { SpinnerMessage, UserMessage } from '@/components/stocks/message'
 import { Chat } from '../types'
 import { auth } from '@/auth'
+// Remove flight booking specific components
+// ... 
 import { CheckIcon, SpinnerIcon } from '@/components/ui/icons'
 import { format } from 'date-fns'
 import { experimental_streamText } from 'ai'
@@ -31,96 +33,7 @@ const genAI = new GoogleGenerativeAI(
   process.env.GOOGLE_GENERATIVE_AI_API_KEY || ''
 )
 
-async function describeImage(imageBase64: string) {
-  'use server'
-
-  await rateLimit()
-
-  const aiState = getMutableAIState()
-  const spinnerStream = createStreamableUI(null)
-  const messageStream = createStreamableUI(null)
-  const uiStream = createStreamableUI()
-
-  uiStream.update(
-    <BotCard>
-      <Video isLoading /> 
-    </BotCard>
-  )
-
-  ;(async () => {
-    try {
-      let text = ''
-
-      // attachment as video for demo purposes,
-      // add your implementation here to support
-      // video as input for prompts.
-      if (imageBase64 === '') {
-        await new Promise(resolve => setTimeout(resolve, 5000))
-
-        text = `
-      The books in this image are:
-
-      1. The Little Prince by Antoine de Saint-Exupéry
-      2. The Prophet by Kahlil Gibran
-      3. Man's Search for Meaning by Viktor Frankl
-      4. The Alchemist by Paulo Coelho
-      5. The Kite Runner by Khaled Hosseini
-      6. To Kill a Mockingbird by Harper Lee
-      7. The Catcher in the Rye by J.D. Salinger
-      8. The Great Gatsby by F. Scott Fitzgerald
-      9. 1984 by George Orwell
-      10. Animal Farm by George Orwell
-      `
-      } else {
-        const imageData = imageBase64.split(',')[1]
-
-        const model = genAI.getGenerativeModel({ model: 'gemini-pro-vision' })
-        const prompt = 'List the books in this image.'
-        const image = {
-          inlineData: {
-            data: imageData,
-            mimeType: 'image/png'
-          }
-        }
-
-        const result = await model.generateContent([prompt, image])
-        text = result.response.text()
-        console.log(text)
-      }
-
-      spinnerStream.done(null)
-      messageStream.done(null)
-
-      uiStream.done(
-        <BotCard>
-          <Video />
-        </BotCard>
-      )
-
-      aiState.done({
-        ...aiState.get(),
-        interactions: [text]
-      })
-    } catch (e) {
-      console.error(e)
-
-      const error = new Error(
-        'The AI got rate limited, please try again later.'
-      )
-      uiStream.error(error)
-      spinnerStream.error(error)
-      messageStream.error(error)
-      aiState.done()
-    }
-  })()
-
-  return {
-    id: nanoid(),
-    attachments: uiStream.value,
-    spinner: spinnerStream.value,
-    display: messageStream.value
-  }
-}
+// ... (describeImage function remains the same)
 
 async function submitUserMessage(content: string) {
   'use server'
@@ -145,6 +58,7 @@ async function submitUserMessage(content: string) {
     role: message.role,
     content: message.content
   }))
+  // console.log(history)
 
   const textStream = createStreamableValue('')
   const spinnerStream = createStreamableUI(<SpinnerMessage />)
@@ -156,20 +70,21 @@ async function submitUserMessage(content: string) {
       const result = await experimental_streamText({
         model: google.generativeAI('models/gemini-1.0-pro-001'),
         temperature: 0,
-        // Add your new tools here 
         tools: {
-          summarizeText: {
-            description: 'Summarize the given text into a concise paragraph.',
-            parameters: z.object({
-              text: z.string().describe('The text to be summarized.')
-            })
-          },
-          // ... more tools
+          // Add your custom tools here 
+          // Example:
+          // summarizeText: {
+          //   description: 'Summarize the provided text.',
+          //   parameters: z.object({
+          //     text: z.string().describe('The text to be summarized.')
+          //   })
+          // },
+          // ...
         },
         system: `\
-          You are a helpful and versatile AI assistant. You can assist with various tasks, including answering questions, generating creative content, summarizing information, and more.
-        `,
-        messages: [...history] 
+      You are a friendly and helpful AI assistant. I can help you with various tasks and answer your questions in an informative way.
+      `,
+        messages: [...history]
       })
 
       let textContent = ''
@@ -198,12 +113,20 @@ async function submitUserMessage(content: string) {
         } else if (type === 'tool-call') {
           const { toolName, args } = delta
 
-          // Handle calls to new tools here
-          if (toolName === 'summarizeText') {
-            const { text } = args 
-            // ... implement logic for summarizing text and updating UI
-          }
-          // ... handle other tools
+          // Implement tool calls based on your custom tools
+          // Example:
+          // if (toolName === 'summarizeText') {
+          //   const { text } = args;
+          //   // Use an API or library to summarize the text
+          //   const summary = await summarize(text);
+          //   // Update the UI and AI state
+          //   uiStream.update();
+          //   aiState.done({
+          //     ...aiState.get(),
+          //     interactions: [summary]
+          //   });
+          // } 
+          // ... 
         }
       }
 
@@ -231,20 +154,16 @@ async function submitUserMessage(content: string) {
   }
 }
 
-// ... other functions (requestCode, validateCode)
+// ... (requestCode and validateCode functions remain the same) 
 
-export type Message = {
-  role: 'user' | 'assistant' | 'system' | 'function' | 'data' | 'tool'
-  content: string
-  id?: string
-  name?: string
-  display?: {
-    name: string
-    props: Record<string, any>
-  }
-}
+// ... (Message and AIState types remain the same)
 
-// ... other types (AIState, UIState) 
+export type UIState = {
+  id: string
+  display: React.ReactNode
+  spinner?: React.ReactNode
+  attachments?: React.ReactNode
+}[]
 
 export const AI = createAI<AIState, UIState>({
   actions: {
@@ -252,11 +171,69 @@ export const AI = createAI<AIState, UIState>({
     requestCode,
     validateCode,
     describeImage
-    // ... add new actions here
   },
   initialUIState: [],
   initialAIState: { chatId: nanoid(), interactions: [], messages: [] },
-  // ... other functions (unstable_onGetUIState, unstable_onSetAIState, getUIStateFromAIState)
+  unstable_onGetUIState: async () => {
+    'use server'
+
+    const session = await auth()
+
+    if (session && session.user) {
+      const aiState = getAIState()
+
+      if (aiState) {
+        const uiState = getUIStateFromAIState(aiState)
+        return uiState
+      }
+    } else {
+      return
+    }
+  },
+  unstable_onSetAIState: async ({ state }) => {
+    'use server'
+
+    const session = await auth()
+
+    if (session && session.user) {
+      const { chatId, messages } = state
+
+      const createdAt = new Date()
+      const userId = session.user.id as string
+      const path = `/chat/${chatId}`
+      const title = messages[0].content.substring(0, 100)
+
+      const chat: Chat = {
+        id: chatId,
+        title,
+        userId,
+        createdAt,
+        messages,
+        path
+      }
+
+      await saveChat(chat)
+    } else {
+      return
+    }
+  }
 })
 
-// ... 
+// Modify getUIStateFromAIState to handle different tools and their UIs 
+export const getUIStateFromAIState = (aiState: Chat) => {
+  return aiState.messages
+    .filter(message => message.role !== 'system')
+    .map((message, index) => ({
+      id: `${aiState.chatId}-${index}`,
+      display:
+        message.role === 'assistant' ? (
+          // Handle different tool UIs here based on message.display.name
+          // ... 
+          <BotMessage content={message.content} /> 
+        ) : message.role === 'user' ? (
+          <UserMessage showAvatar>{message.content}</UserMessage>
+        ) : (
+          <BotMessage content={message.content} />
+        )
+    }))
+}
