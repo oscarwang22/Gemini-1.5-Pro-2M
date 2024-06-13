@@ -70,7 +70,7 @@ async function describeImage(imageBase64: string) {
       } else {
         const imageData = imageBase64.split(',')[1]
 
-        const model = genAI.getGenerativeModel({ model: 'gemini-pro-vision' })
+        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro-2m-latest' })
         const prompt = 'Do as instructed'
         const image = {
           inlineData: {
