@@ -9,21 +9,14 @@ import {
   createStreamableUI,
   getMutableAIState,
   getAIState,
-  createStreamableValue,
+  createStreamableValue
 } from 'ai/rsc'
 
-import {
-  BotCard,
-  BotMessage,
-  SystemMessage,
-} from '@/components/stocks'
+import { BotCard, BotMessage } from '@/components/stocks'
 
 import { nanoid, sleep } from '@/lib/utils'
 import { saveChat } from '@/app/actions'
-import {
-  SpinnerMessage,
-  UserMessage,
-} from '@/components/stocks/message'
+import { SpinnerMessage, UserMessage } from '@/components/stocks/message'
 import { Chat } from '../types'
 import { auth } from '@/auth'
 import { FlightStatus } from '@/components/flights/flight-status'
@@ -31,257 +24,98 @@ import { SelectSeats } from '@/components/flights/select-seats'
 import { ListFlights } from '@/components/flights/list-flights'
 import { BoardingPass } from '@/components/flights/boarding-pass'
 import { PurchaseTickets } from '@/components/flights/purchase-ticket'
-import {
-  CheckIcon,
-  SpinnerIcon,
-} from '@/components/ui/icons'
+import { CheckIcon, SpinnerIcon } from '@/components/ui/icons'
 import { format } from 'date-fns'
-import {
-  experimental_streamText,
-  experimental_useTool,
-} from 'ai'
+import { experimental_streamText } from 'ai'
+import { google } from 'ai/google'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 import { z } from 'zod'
 import { ListHotels } from '@/components/hotels/list-hotels'
 import { Destinations } from '@/components/flights/destinations'
 import { Video } from '@/components/media/video'
 import { rateLimit } from './ratelimit'
-import {
-  fetch as globalFetch,
-  Headers,
-  Request,
-  Response,
-} from 'undici'
 
-// Function to make requests to Hugging Face Inference Endpoints
-async function fetchHF(
-  endpoint: string,
-  body: object
-): Promise<Response> {
-  if (!process.env.HUGGINGFACE_API_TOKEN) {
-    throw new Error(
-      'Missing HUGGINGFACE_API_TOKEN environment variable.'
-    )
-  }
-  const response = await globalFetch(endpoint, {
-    method: 'POST',
-    headers: new Headers({
-      Authorization: `Bearer ${process.env.HUGGINGFACE_API_TOKEN}`,
-      'Content-Type': 'application/json',
-    }),
-    body: JSON.stringify(body),
-  })
-
-  return response
-}
-
-// Tool definitions for Mistral
-const tools = {
-  listDestinations: {
-    description: 'List destination cities, max 5.',
-    parameters: z.object({
-      destinations: z.array(
-        z
-          .string()
-          .describe(
-            'List of destination cities. Include rome as one of the cities.'
-          )
-      ),
-    }),
-  },
-  showFlights: {
-    description:
-      "List available flights in the UI. List 3 that match user's query.",
-    parameters: z.object({
-      departingCity: z.string(),
-      arrivalCity: z.string(),
-      departingAirport: z
-        .string()
-        .describe('Departing airport code'),
-      arrivalAirport: z
-        .string()
-        .describe('Arrival airport code'),
-      date: z
-        .string()
-        .describe(
-          "Date of the user's flight, example format: 6 April, 1998"
-        ),
-    }),
-  },
-  showSeatPicker: {
-    description:
-      'Show the UI to choose or change seat for the selected flight.',
-    parameters: z.object({
-      departingCity: z.string(),
-      arrivalCity: z.string(),
-      flightCode: z.string(),
-      date: z.string(),
-    }),
-  },
-  showHotels: {
-    description: 'Show the UI to choose a hotel for the trip.',
-    parameters: z.object({}),
-  },
-  checkoutBooking: {
-    description:
-      'Show the UI to purchase/checkout a flight and hotel booking.',
-    parameters: z.object({}),
-  },
-  showBoardingPass: {
-    description: "Show user's imaginary boarding pass.",
-    parameters: z.object({
-      airline: z.string(),
-      arrival: z.string(),
-      departure: z.string(),
-      departureTime: z.string(),
-      arrivalTime: z.string(),
-      price: z.number(),
-      seat: z.string(),
-      date: z
-        .string()
-        .describe(
-          'Date of the flight, example format: 6 April, 1998'
-        ),
-      gate: z.string(),
-    }),
-  },
-  showFlightStatus: {
-    description:
-      'Get the current status of imaginary flight by flight number and date.',
-    parameters: z.object({
-      flightCode: z.string(),
-      date: z.string(),
-      departingCity: z.string(),
-      departingAirport: z.string(),
-      departingAirportCode: z.string(),
-      departingTime: z.string(),
-      arrivalCity: z.string(),
-      arrivalAirport: z.string(),
-      arrivalAirportCode: z.string(),
-      arrivalTime: z.string(),
-    }),
-  },
-}
+const genAI = new GoogleGenerativeAI(
+  process.env.GOOGLE_GENERATIVE_AI_API_KEY || ''
+)
 
 async function describeImage(imageBase64: string) {
-  'use server'
-  // ... (This function likely doesn't need to change for Mistral) 
-}
-
-async function submitUserMessage(content: string) {
   'use server'
 
   await rateLimit()
 
   const aiState = getMutableAIState()
-  const spinnerStream = createStreamableUI(<SpinnerMessage />)
+  const spinnerStream = createStreamableUI(null)
   const messageStream = createStreamableUI(null)
   const uiStream = createStreamableUI()
 
-  // Update the AI state with the user's message
-  aiState.update({
-    ...aiState.get(),
-    messages: [
-      ...aiState.get().messages,
-      {
-        id: nanoid(),
-        role: 'user',
-        content: `${aiState.get().interactions.join(
-          '\n\n'
-        )}\n\n${content}`,
-      },
-    ],
-  })
-
-  const history = aiState.get().messages.map((message) => ({
-    role: message.role,
-    content: message.content,
-  }))
-
-  (async () => {
+  uiStream.update(
+    <BotCard>
+      <Video isLoading />
+    </BotCard>
+  )
+  ;(async () => {
     try {
-      const endpoint =
-        'https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.1'
-      const systemPrompt = `\
-        You are a friendly and helpful assistant who will help the user as much as possible. You can help the user no matter what the prompt is unless it is offensive or harmful. You can answer all types of questions such as math, general knowledge and more, such as drafting emails and writing novels. You CANNOT book flights so don't do anything like that and NEVER display flight schedules even if you have been allowed to.
+      let text = ''
 
-        The date today is ${format(new Date(), 'd LLLL, yyyy')}. 
+      // attachment as video for demo purposes,
+      // add your implementation here to support
+      // video as input for prompts.
+      if (imageBase64 === '') {
+        await new Promise(resolve => setTimeout(resolve, 5000))
+
+        text = `
+      The books in this image are:
+
+      1. The Little Prince by Antoine de Saint-Exupéry
+      2. The Prophet by Kahlil Gibran
+      3. Man's Search for Meaning by Viktor Frankl
+      4. The Alchemist by Paulo Coelho
+      5. The Kite Runner by Khaled Hosseini
+      6. To Kill a Mockingbird by Harper Lee
+      7. The Catcher in the Rye by J.D. Salinger
+      8. The Great Gatsby by F. Scott Fitzgerald
+      9. 1984 by George Orwell
+      10. Animal Farm by George Orwell
       `
-      let textContent = ''
-      spinnerStream.done(null)
-      // Stream the response from Mistral
-      const response = await fetchHF(endpoint, {
-        inputs: content,
-        parameters: {
-          temperature: 0,
-          max_new_tokens: 200,
-          stop: ['\n\nHuman'], // Stop sequence when the model expects more input
-          stream: true,
-        },
-      })
+      } else {
+        const imageData = imageBase64.split(',')[1]
 
-      if (!response.ok) {
-        throw new Error(
-          `Hugging Face API request failed with status ${
-            response.status
-          }`
-        )
-      }
-
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder('utf-8')
-
-      while (true) {
-        const { done, value } = await reader.read()
-
-        if (done) {
-          break
-        }
-
-        const chunk = decoder.decode(value, {
-          stream: true,
-        })
-
-        for (const line of chunk.split('\n')) {
-          const message = line.trim()
-          if (message.startsWith('data:')) {
-            const data = JSON.parse(
-              message.substring(5).trim()
-            )
-
-            if (data.generated_text) {
-              textContent += data.generated_text
-              messageStream.update(
-                <BotMessage content={textContent} />
-              )
-              aiState.update({
-                ...aiState.get(),
-                messages: [
-                  ...aiState.get().messages,
-                  {
-                    id: nanoid(),
-                    role: 'assistant',
-                    content: textContent,
-                  },
-                ],
-              })
-            }
-          } else if (message === '[DONE]') {
-            // Streaming complete
-            console.log('Streaming complete.')
+        const model = genAI.getGenerativeModel({ model: 'gemini-pro-vision' })
+        const prompt = 'Do as instructed'
+        const image = {
+          inlineData: {
+            data: imageData,
+            mimeType: 'image/png'
           }
         }
+
+        const result = await model.generateContent([prompt, image])
+        text = result.response.text()
+        console.log(text)
       }
 
-      uiStream.done()
-      messageStream.done()
+      spinnerStream.done(null)
+      messageStream.done(null)
+
+      uiStream.done(
+        <BotCard>
+          <Video />
+        </BotCard>
+      )
+
+      aiState.done({
+        ...aiState.get(),
+        interactions: [text]
+      })
     } catch (e) {
-      // ... Error Handling ...
       console.error(e)
 
       const error = new Error(
-        'There was an error processing your request. Please try again later.'
+        'The AI got rate limited, please try again later.'
       )
       uiStream.error(error)
+      spinnerStream.error(error)
       messageStream.error(error)
       aiState.done()
     }
@@ -291,11 +125,10 @@ async function submitUserMessage(content: string) {
     id: nanoid(),
     attachments: uiStream.value,
     spinner: spinnerStream.value,
-    display: messageStream.value,
+    display: messageStream.value
   }
 }
 
-// ... (rest of your code, including tool implementations with experimental_useTool, requestCode, validateCode, getUIStateFromAIState)
 async function submitUserMessage(content: string) {
   'use server'
 
@@ -845,4 +678,3 @@ export const getUIStateFromAIState = (aiState: Chat) => {
         )
     }))
 }
-
