@@ -151,7 +151,7 @@ async function submitUserMessage(content: string) {
   ;(async () => {
     try {
       const result = await experimental_streamText({
-        model: google.generativeAI('models/gemini-1.5-pro-2m-latest'),
+        model: google.generativeAI('models/gemini-1.5-pro-latest'),
         temperature: 0,
         tools: {
           listDestinations: {
